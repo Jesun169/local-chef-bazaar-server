@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ObjectId } = require("mongodb");
@@ -7,14 +6,10 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-// ---------------- Middleware ----------------
 app.use(cors());
 app.use(express.json());
 
-// ---------------- MongoDB Connection ----------------
-const uri =
-  process.env.MONGO_URI ||
-  "mongodb+srv://chefdb:X2Ojkg5Gd6otLHxQ@cluster0.lls6dfv.mongodb.net/?appName=Cluster0";
+const uri = process.env.MONGO_URI;
 
 const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
 
@@ -30,12 +25,10 @@ async function run() {
     const usersCollection = db.collection("users");
     const favoritesCollection = db.collection("favorites");
 
-    // ---------------- ROOT ----------------
     app.get("/", (req, res) => {
       res.send("Local Chef Bazaar Server Running ✅");
     });
 
-    // ---------------- MEALS ----------------
     app.get("/meals", async (req, res) => {
       try {
         const limit = parseInt(req.query.limit) || 0;
@@ -70,7 +63,6 @@ async function run() {
       }
     });
 
-    // ---------------- REVIEWS ----------------
     app.get("/reviews", async (req, res) => {
       try {
         const { foodId } = req.query;
@@ -98,7 +90,6 @@ async function run() {
       }
     });
 
-    // ---------------- FAVORITES ----------------
     app.post("/favorites", async (req, res) => {
       try {
         const fav = req.body;
@@ -131,7 +122,6 @@ async function run() {
       }
     });
 
-    // ---------------- ORDERS ----------------
     app.post("/orders", async (req, res) => {
       try {
         const order = req.body;
@@ -152,7 +142,6 @@ async function run() {
       }
     });
 
-    // ---------------- USERS ----------------
     app.post("/users", async (req, res) => {
       try {
         const user = req.body;
@@ -182,7 +171,6 @@ async function run() {
       }
     });
 
-    // ---------------- START SERVER ----------------
     app.listen(port, () => {
       console.log(`🚀 Server running on port ${port}`);
     });
