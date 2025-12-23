@@ -6,7 +6,14 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://superb-palmier-53c23d.netlify.app"
+  ],
+  credentials: true
+}));
+
 app.use(express.json());
 
 const uri = process.env.MONGO_URI;
