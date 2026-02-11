@@ -6,46 +6,34 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-/* =====================
-   CORS & MIDDLEWARE
-===================== */
-app.use(cors({
-  origin: [
-    "http://localhost:5173",  // local dev
-    "https://superb-palmier-53c23d.netlify.app", // your deployed site
-    "https://beamish-starburst-1296f3.netlify.app" // if new Netlify link
-  ],
-  credentials: true
-}));
-
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://superb-palmier-53c23d.netlify.app",
+      "https://beamish-starburst-1296f3.netlify.app",
+    ],
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
-/* =====================
-   MONGODB CONNECTION
-===================== */
-const uri = process.env.MONGO_URI;
-const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+const client = new MongoClient(process.env.MONGO_URI);
+let db;
 
-let isConnected = false;
+let usersCollection,
+  mealsCollection,
+  reviewsCollection,
+  favoritesCollection,
+  ordersCollection,
+  paymentsCollection,
+  requestsCollection;
 
-let usersCollection;
-let mealsCollection;
-let reviewsCollection;
-let favoritesCollection;
-let ordersCollection;
-let paymentsCollection;
-let requestsCollection;
-
-async function run() {
-  try {
-    if (!isConnected) {
-      await client.connect();
-      isConnected = true;
-      console.log("✅ MongoDB connected");
-    }
-
-    const db = client.db("localChefBazaar");
+async function connectDB() {
+  if (!db) {
+    await client.connect();
+    db = client.db("localChefBazaar");
 
     usersCollection = db.collection("users");
     mealsCollection = db.collection("meals");
@@ -55,26 +43,29 @@ async function run() {
     paymentsCollection = db.collection("payments");
     requestsCollection = db.collection("requests");
 
-  } catch (error) {
-    console.error("❌ MongoDB connection failed:", error);
+    console.log("✅ MongoDB connected");
   }
 }
 
-run();
-
-/* =====================
-   ROUTES
-===================== */
-
-app.get("/", (req, res) => {
-  res.send("Local Chef Bazaar Server is Running ✅");
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Database connection failed" });
+  }
 });
 
-/* ---------- USERS ---------- */
+/* ROOT */
+app.get("/", (req, res) => {
+  res.json({ message: "Local Chef Bazaar Server Running ✅" });
+});
+
+/* USERS */
 app.post("/users", async (req, res) => {
   const user = req.body;
   const exists = await usersCollection.findOne({ email: user.email });
-  if (exists) return res.send({ message: "User already exists" });
+  if (exists) return res.json({ message: "User already exists" });
 
   const result = await usersCollection.insertOne({
     ...user,
@@ -83,138 +74,216 @@ app.post("/users", async (req, res) => {
     createdAt: new Date().toISOString(),
   });
 
-  res.send(result);
+  res.json({ ...user, _id: result.insertedId.toString() });
 });
 
 app.get("/users", async (req, res) => {
-  res.send(await usersCollection.find().toArray());
+  const users = await usersCollection.find().toArray();
+  res.json(users.map(u => ({ ...u, _id: u._id.toString() })));
 });
 
 app.get("/users/role/:email", async (req, res) => {
   const user = await usersCollection.findOne({ email: req.params.email });
-  res.send({ role: user?.role || "user" });
+  res.json({ role: user?.role || "user" });
 });
 
-/* ---------- MEALS ---------- */
+app.patch("/users/fraud/:id", async (req, res) => {
+  if (!ObjectId.isValid(req.params.id))
+    return res.status(400).json({ message: "Invalid ID" });
+
+  const user = await usersCollection.findOne({ _id: new ObjectId(req.params.id) });
+  if (!user) return res.status(404).json({ message: "User not found" });
+  if (user.role === "admin")
+    return res.status(403).json({ message: "Admin cannot be fraud" });
+
+  await usersCollection.updateOne(
+    { _id: new ObjectId(req.params.id) },
+    { $set: { status: "fraud" } }
+  );
+
+  res.json({ success: true });
+});
+
+/* MEALS */
 app.get("/meals", async (req, res) => {
-  res.send(await mealsCollection.find().toArray());
+  const query = {};
+  if (req.query.chefEmail) query.chefEmail = req.query.chefEmail;
+
+  const meals = await mealsCollection.find(query).toArray();
+  res.json(meals.map(m => ({ ...m, _id: m._id.toString() })));
 });
 
 app.get("/meals/:id", async (req, res) => {
   if (!ObjectId.isValid(req.params.id))
-    return res.status(400).send({ message: "Invalid ID" });
+    return res.status(400).json({ message: "Invalid ID" });
 
-  const meal = await mealsCollection.findOne({
-    _id: new ObjectId(req.params.id),
-  });
-  res.send(meal);
+  const meal = await mealsCollection.findOne({ _id: new ObjectId(req.params.id) });
+  if (!meal) return res.status(404).json({ message: "Meal not found" });
+
+  res.json({ ...meal, _id: meal._id.toString() });
 });
 
 app.post("/meals", async (req, res) => {
-  res.send(await mealsCollection.insertOne(req.body));
+  const result = await mealsCollection.insertOne(req.body);
+  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
-/* ---------- REVIEWS ---------- */
+app.put("/meals/:id", updateMeal);
+app.patch("/meals/:id", updateMeal);
+
+async function updateMeal(req, res) {
+  if (!ObjectId.isValid(req.params.id))
+    return res.status(400).json({ message: "Invalid ID" });
+
+  const result = await mealsCollection.updateOne(
+    { _id: new ObjectId(req.params.id) },
+    { $set: req.body }
+  );
+
+  if (!result.matchedCount)
+    return res.status(404).json({ message: "Meal not found" });
+
+  res.json({ success: true });
+}
+
+app.delete("/meals/:id", async (req, res) => {
+  await mealsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+  res.json({ success: true });
+});
+
+/* REVIEWS */
 app.get("/reviews", async (req, res) => {
   const query = req.query.userEmail ? { userEmail: req.query.userEmail } : {};
-  res.send(await reviewsCollection.find(query).toArray());
+  const reviews = await reviewsCollection.find(query).toArray();
+  res.json(reviews.map(r => ({ ...r, _id: r._id.toString() })));
 });
 
 app.post("/reviews", async (req, res) => {
-  res.send(await reviewsCollection.insertOne({
+  const result = await reviewsCollection.insertOne({
     ...req.body,
-    date: new Date().toISOString()
-  }));
+    date: new Date().toISOString(),
+  });
+  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
-/* ---------- FAVORITES ---------- */
+/* FAVORITES */
 app.post("/favorites", async (req, res) => {
-  const fav = req.body;
-  const exists = await favoritesCollection.findOne({
-    userEmail: fav.userEmail,
-    mealId: fav.mealId,
-  });
+  const exists = await favoritesCollection.findOne(req.body);
+  if (exists) return res.status(400).json({ message: "Already added" });
 
-  if (exists) return res.status(400).send({ message: "Already favorited" });
-
-  res.send(await favoritesCollection.insertOne({
-    ...fav,
+  const result = await favoritesCollection.insertOne({
+    ...req.body,
     addedTime: new Date().toISOString(),
-  }));
+  });
+  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
 app.get("/favorites", async (req, res) => {
-  res.send(await favoritesCollection.find({ userEmail: req.query.email }).toArray());
+  const favs = await favoritesCollection
+    .find({ userEmail: req.query.email })
+    .toArray();
+  res.json(favs.map(f => ({ ...f, _id: f._id.toString() })));
 });
 
-/* ---------- ORDERS ---------- */
+/* ORDERS */
 app.post("/orders", async (req, res) => {
-  res.send(await ordersCollection.insertOne({
+  const result = await ordersCollection.insertOne({
     ...req.body,
     orderStatus: "pending",
     paymentStatus: "Pending",
     orderTime: new Date().toISOString(),
-  }));
+  });
+  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
 app.get("/orders", async (req, res) => {
-  res.send(await ordersCollection
-    .find({ userEmail: req.query.email })
+  const query = {};
+  if (req.query.email) query.userEmail = req.query.email;
+  if (req.query.chefEmail) query.chefEmail = req.query.chefEmail;
+  if (req.query.chefId) query.chefId = req.query.chefId;
+
+  const orders = await ordersCollection
+    .find(query)
     .sort({ orderTime: -1 })
-    .toArray());
+    .toArray();
+
+  res.json(orders.map(o => ({ ...o, _id: o._id.toString() })));
 });
 
-app.patch("/orders/status/:id", async (req, res) => {
+app.patch("/orders/:id/status", async (req, res) => {
   if (!ObjectId.isValid(req.params.id))
-    return res.status(400).send({ message: "Invalid order ID" });
+    return res.status(400).json({ message: "Invalid order ID" });
 
-  res.send(await ordersCollection.updateOne(
+  await ordersCollection.updateOne(
     { _id: new ObjectId(req.params.id) },
     { $set: { orderStatus: req.body.orderStatus } }
-  ));
+  );
+  res.json({ success: true });
 });
 
-app.patch("/orders/payment/:id", async (req, res) => {
-  if (!ObjectId.isValid(req.params.id))
-    return res.status(400).send({ message: "Invalid order ID" });
-
-  res.send(await ordersCollection.updateOne(
+app.patch("/orders/:id/payment", async (req, res) => {
+  await ordersCollection.updateOne(
     { _id: new ObjectId(req.params.id) },
     { $set: { paymentStatus: "Paid" } }
-  ));
+  );
+  res.json({ success: true });
 });
 
-/* ---------- PAYMENTS ---------- */
+/*ADMIN STATS*/
+app.get("/admin/stats", async (req, res) => {
+  try {
+    const totalUsers = await usersCollection.countDocuments();
+    const pendingOrders = await ordersCollection.countDocuments({ orderStatus: "pending" });
+    const deliveredOrders = await ordersCollection.countDocuments({ orderStatus: "delivered" });
+
+    const deliveredOrdersData = await ordersCollection.find({ orderStatus: "delivered" }).toArray();
+    const totalPaymentAmount = deliveredOrdersData.reduce(
+      (sum, o) => sum + Number(o.price || 0),
+      0
+    );
+
+    res.json({
+      totalUsers,
+      pendingOrders,
+      deliveredOrders,
+      totalPaymentAmount,
+    });
+  } catch (error) {
+    console.error("Admin stats error:", error);
+    res.status(500).json({ message: "Failed to fetch admin statistics" });
+  }
+});
+
+/* PAYMENTS */
 app.post("/payments", async (req, res) => {
-  res.send(await paymentsCollection.insertOne({
+  const result = await paymentsCollection.insertOne({
     ...req.body,
     paidAt: new Date().toISOString(),
-  }));
+  });
+  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
-/* ---------- REQUESTS ---------- */
+/*REQUESTS*/
 app.post("/requests", async (req, res) => {
   const exists = await requestsCollection.findOne({
     userEmail: req.body.userEmail,
     requestType: req.body.requestType,
     requestStatus: "pending",
   });
+  if (exists) return res.status(400).json({ message: "Already pending" });
 
-  if (exists)
-    return res.status(400).send({ message: "Request already pending" });
-
-  res.send(await requestsCollection.insertOne({
+  const result = await requestsCollection.insertOne({
     ...req.body,
     requestStatus: "pending",
     requestTime: new Date().toISOString(),
-  }));
+  });
+
+  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
 app.get("/requests", async (req, res) => {
-  res.send(await requestsCollection
-    .find({ requestStatus: "pending" })
-    .sort({ requestTime: -1 })
-    .toArray());
+  const reqs = await requestsCollection.find().toArray();
+  res.json(reqs.map(r => ({ ...r, _id: r._id.toString() })));
 });
 
 app.patch("/requests/:id", async (req, res) => {
@@ -226,16 +295,12 @@ app.patch("/requests/:id", async (req, res) => {
   );
 
   if (status === "approved" && role) {
-    await usersCollection.updateOne(
-      { email: userEmail },
-      { $set: { role } }
-    );
+    await usersCollection.updateOne({ email: userEmail }, { $set: { role } });
   }
 
-  res.send({ success: true });
+  res.json({ success: true });
 });
 
-/* =====================
-   EXPORT FOR VERCEL
-===================== */
+app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
+
 module.exports = app;
