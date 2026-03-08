@@ -219,43 +219,95 @@ app.post("/reviews", async (req, res) => {
     res.status(500).json({ message: "Failed to add review" });
   }
 });
-/* ================= FAVORITES ================= */
 
-/* ================= FAVORITES ================= */
+app.delete("/reviews/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
 
-app.post("/favorites", async (req, res) => {
-  const exists = await favoritesCollection.findOne({
-    userEmail: req.body.userEmail,
-    mealId: req.body.mealId,
-  });
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid review ID" });
+    }
 
-  if (exists) {
-    return res.status(400).json({
-      message: "Meal already added to favorites",
+    const review = await reviewsCollection.findOne({
+      _id: new ObjectId(id),
     });
+
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    await reviewsCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.json({
+      success: true,
+      message: "Review deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete review error:", error);
+    res.status(500).json({ message: "Failed to delete review" });
   }
-
-  const result = await favoritesCollection.insertOne({
-    ...req.body,
-    addedTime: new Date().toISOString(),
-  });
-
-  res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
+app.patch("/reviews/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { comment, rating } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid review ID" });
+    }
+
+    await reviewsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          comment,
+          rating: Number(rating),
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      message: "Review updated successfully",
+    });
+  } catch (error) {
+    console.error("Update review error:", error);
+    res.status(500).json({ message: "Failed to update review" });
+  }
+});
+/* ================= FAVORITES ================= */
 app.get("/favorites", async (req, res) => {
-  const favs = await favoritesCollection
-    .find({ userEmail: req.query.email })
-    .toArray();
+  try {
+    // prevent browser caching
+    res.set("Cache-Control", "no-store");
 
-  res.json(favs.map((f) => ({ ...f, _id: f._id.toString() })));
+    const email = req.query.email;
+
+    if (!email) {
+      return res.json([]);
+    }
+
+    const favs = await favoritesCollection
+      .find({ userEmail: email })
+      .toArray();
+
+    res.json(favs.map((f) => ({ ...f, _id: f._id.toString() })));
+  } catch (error) {
+    console.error("Favorites fetch error:", error);
+    res.status(500).json({ message: "Failed to fetch favorites" });
+  }
 });
-
 /* DELETE ROUTE */
-
 app.delete("/favorites/:id", async (req, res) => {
   try {
     const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid favorite ID" });
+    }
 
     const result = await favoritesCollection.deleteOne({
       _id: new ObjectId(id),
