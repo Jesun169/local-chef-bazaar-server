@@ -257,24 +257,27 @@ app.delete("/favorites/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    let query;
-
-    if (ObjectId.isValid(id)) {
-      query = { _id: new ObjectId(id) };
-    } else {
-      query = { _id: id };
-    }
-
-    const result = await favoritesCollection.deleteOne(query);
+    const result = await favoritesCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
 
     if (result.deletedCount === 0) {
-      return res.status(404).json({ message: "Favorite not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Favorite not found",
+      });
     }
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Delete favorite error:", err);
-    res.status(500).json({ message: "Failed to delete favorite" });
+    res.json({
+      success: true,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Delete error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Delete failed",
+    });
   }
 });
 
