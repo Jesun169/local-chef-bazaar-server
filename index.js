@@ -183,13 +183,17 @@ app.post("/reviews", async (req, res) => {
     const { mealId, reviewerName, reviewerImage, rating, comment, userEmail } =
       req.body;
 
-    if (!mealId || !reviewerName || !rating || !comment) {
+    if (!mealId || !rating || !comment || !userEmail) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    // ✅ FIX: fetch user from DB
+    const userData = await usersCollection.findOne({ email: userEmail });
+
     const review = {
       mealId: String(mealId),
-      reviewerName: userData?.userName || userEmail.split("@")[0],
+      reviewerName:
+        userData?.userName || reviewerName || userEmail.split("@")[0],
       reviewerImage,
       rating: Number(rating),
       comment,
@@ -199,15 +203,19 @@ app.post("/reviews", async (req, res) => {
 
     const result = await reviewsCollection.insertOne(review);
 
-    // --- FIX: Update meal average rating ---
-    const allReviews = await reviewsCollection.find({ mealId: String(mealId) }).toArray();
-    const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
+    // ✅ Update average rating
+    const allReviews = await reviewsCollection
+      .find({ mealId: String(mealId) })
+      .toArray();
+
+    const avgRating =
+      allReviews.reduce((sum, r) => sum + r.rating, 0) /
+      allReviews.length;
 
     await mealsCollection.updateOne(
       { _id: new ObjectId(mealId) },
       { $set: { rating: parseFloat(avgRating.toFixed(1)) } }
     );
-    // --- END FIX ---
 
     res.json({
       success: true,
