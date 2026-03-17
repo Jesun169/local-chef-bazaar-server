@@ -189,9 +189,9 @@ app.post("/reviews", async (req, res) => {
 
     const review = {
       mealId: String(mealId),
-      reviewerName,
+      reviewerName: userData?.userName || userEmail.split("@")[0],
       reviewerImage,
-      rating: Number(rating), // ensure it's a number
+      rating: Number(rating),
       comment,
       userEmail,
       createdAt: new Date().toISOString(),
