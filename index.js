@@ -153,7 +153,7 @@ app.delete("/meals/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-
+/* ================= REVIEWS ================= */
 /* ================= REVIEWS ================= */
 
 // GET reviews
@@ -170,12 +170,13 @@ app.get("/reviews", async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    res.json(
-      reviews.map((r) => ({
-        ...r,
-        _id: r._id.toString(),
-      }))
-    );
+  res.json(
+  reviews.map((r) => ({
+    ...r,
+    _id: r._id.toString(),
+    createdAt: r.createdAt || r.date, // ensure frontend gets createdAt
+  }))
+);
   } catch {
     res.status(500).json({ message: "Failed to fetch reviews" });
   }
@@ -291,17 +292,15 @@ app.patch("/reviews/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid review ID" });
     }
 
- await reviewsCollection.updateOne(
-  { _id: new ObjectId(id) },
-  {
-    $set: {
-      comment,
-      rating: Number(rating),
-      mealName: req.body.mealName || undefined,
-      reviewerName: req.body.reviewerName || undefined,
-    },
-  }
-);
+    await reviewsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          comment,
+          rating: Number(rating),
+        },
+      }
+    );
 
     res.json({
       success: true,
