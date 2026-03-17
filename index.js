@@ -150,13 +150,14 @@ app.delete("/meals/:id", async (req, res) => {
 });
 
 /* ================= REVIEWS ================= */
+/* ================= REVIEWS ================= */
 
+// GET reviews
 app.get("/reviews", async (req, res) => {
   try {
     const { mealId, userEmail } = req.query;
 
     const query = {};
-
     if (mealId) query.mealId = String(mealId);
     if (userEmail) query.userEmail = String(userEmail);
 
@@ -165,35 +166,54 @@ app.get("/reviews", async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    // return consistently with 'createdAt' field
     res.json(
       reviews.map((r) => ({
         ...r,
         _id: r._id.toString(),
       }))
     );
-  } catch (err) {
-    console.error(err);
+  } catch {
     res.status(500).json({ message: "Failed to fetch reviews" });
   }
 });
 
+// POST review
 app.post("/reviews", async (req, res) => {
   try {
-    const { mealId, reviewerName, reviewerImage, rating, comment, userEmail } =
-      req.body;
+    const {
+      mealId,
+      username,
+      reviewerName,
+      reviewerImage,
+      rating,
+      comment,
+      userEmail,
+    } = req.body;
 
     if (!mealId || !rating || !comment || !userEmail) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ message: "Missing fields" });
     }
 
-    // ✅ FIX: fetch user from DB
-    const userData = await usersCollection.findOne({ email: userEmail });
+    const userData = await usersCollection.findOne({
+      email: userEmail,
+    });
 
     const review = {
       mealId: String(mealId),
+
+      // ✅ SUPPORT BOTH
+      username:
+        userData?.userName ||
+        username ||
+        reviewerName ||
+        userEmail.split("@")[0],
+
       reviewerName:
-        userData?.userName || reviewerName || userEmail.split("@")[0],
+        userData?.userName ||
+        username ||
+        reviewerName ||
+        userEmail.split("@")[0],
+
       reviewerImage,
       rating: Number(rating),
       comment,
@@ -203,18 +223,18 @@ app.post("/reviews", async (req, res) => {
 
     const result = await reviewsCollection.insertOne(review);
 
-    // ✅ Update average rating
+    // update avg rating
     const allReviews = await reviewsCollection
       .find({ mealId: String(mealId) })
       .toArray();
 
-    const avgRating =
+    const avg =
       allReviews.reduce((sum, r) => sum + r.rating, 0) /
       allReviews.length;
 
     await mealsCollection.updateOne(
       { _id: new ObjectId(mealId) },
-      { $set: { rating: parseFloat(avgRating.toFixed(1)) } }
+      { $set: { rating: parseFloat(avg.toFixed(1)) } }
     );
 
     res.json({
@@ -308,6 +328,43 @@ app.get("/favorites", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch favorites" });
   }
 });
+/* ================= FAVORITES ================= */
+
+// POST /favorites - add a meal to favorites
+app.post("/favorites", async (req, res) => {
+  try {
+    const { userEmail, mealId, mealName, chefId, chefName, price } = req.body;
+
+    if (!userEmail || !mealId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // Check if already in favorites
+    const exists = await favoritesCollection.findOne({ userEmail, mealId });
+    if (exists) {
+      return res.status(400).json({ message: "Meal already in favorites" });
+    }
+
+    const result = await favoritesCollection.insertOne({
+      userEmail,
+      mealId,
+      mealName,
+      chefId,
+      chefName,
+      price,
+      createdAt: new Date().toISOString(),
+    });
+
+    res.json({
+      success: true,
+      insertedId: result.insertedId.toString(),
+    });
+  } catch (err) {
+    console.error("Add to favorites error:", err);
+    res.status(500).json({ message: "Failed to add favorite" });
+  }
+});
+
 /* DELETE ROUTE */
 app.delete("/favorites/:id", async (req, res) => {
   try {
