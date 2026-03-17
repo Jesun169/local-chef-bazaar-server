@@ -3,6 +3,10 @@ const cors = require("cors");
 const { MongoClient, ObjectId } = require("mongodb");
 require("dotenv").config();
 
+// const Stripe = require("stripe");
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY); 
+
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -149,7 +153,7 @@ app.delete("/meals/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-/* ================= REVIEWS ================= */
+
 /* ================= REVIEWS ================= */
 
 // GET reviews
@@ -287,15 +291,17 @@ app.patch("/reviews/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid review ID" });
     }
 
-    await reviewsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      {
-        $set: {
-          comment,
-          rating: Number(rating),
-        },
-      }
-    );
+ await reviewsCollection.updateOne(
+  { _id: new ObjectId(id) },
+  {
+    $set: {
+      comment,
+      rating: Number(rating),
+      mealName: req.body.mealName || undefined,
+      reviewerName: req.body.reviewerName || undefined,
+    },
+  }
+);
 
     res.json({
       success: true,
@@ -453,6 +459,26 @@ app.post("/payments", async (req, res) => {
   });
 
   res.json({ ...req.body, _id: result.insertedId.toString() });
+});
+
+// CREATE PAYMENT INTENT
+app.post("/create-payment-intent", async (req, res) => {
+  try {
+    const { amount, currency = "BDT" } = req.body; // amount in smallest unit (e.g., cents)
+    if (!amount) return res.status(400).json({ message: "Amount is required" });
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency,
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (error) {
+    console.error("Stripe Payment Intent Error:", error);
+    res.status(500).json({ message: "Failed to create payment intent" });
+  }
 });
 
 /* ================= REQUESTS ================= */
