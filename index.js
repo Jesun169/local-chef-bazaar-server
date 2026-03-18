@@ -65,7 +65,7 @@ app.get("/", (req, res) => {
   res.json({ message: "Local Chef Bazaar Server Running ✅" });
 });
 
-/* ================= USERS ================= */
+/* USERS  */
 
 app.post("/users", async (req, res) => {
   const user = req.body;
@@ -98,7 +98,7 @@ app.get("/users/role/:email", async (req, res) => {
   res.json({ role: user?.role || "user" });
 });
 
-/* ================= MEALS ================= */
+/* MEALS */
 
 app.get("/meals", async (req, res) => {
   const query = {};
@@ -153,10 +153,8 @@ app.delete("/meals/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-/* ================= REVIEWS ================= */
-/* ================= REVIEWS ================= */
+/* REVIEWS */
 
-// GET reviews
 app.get("/reviews", async (req, res) => {
   try {
     const { mealId, userEmail } = req.query;
@@ -170,13 +168,12 @@ app.get("/reviews", async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-  res.json(
-  reviews.map((r) => ({
-    ...r,
-    _id: r._id.toString(),
-    createdAt: r.createdAt || r.date, // ensure frontend gets createdAt
-  }))
-);
+    res.json(
+      reviews.map((r) => ({
+        ...r,
+        _id: r._id.toString(),
+      }))
+    );
   } catch {
     res.status(500).json({ message: "Failed to fetch reviews" });
   }
@@ -187,6 +184,7 @@ app.post("/reviews", async (req, res) => {
   try {
     const {
       mealId,
+      mealName,
       username,
       reviewerName,
       reviewerImage,
@@ -203,32 +201,20 @@ app.post("/reviews", async (req, res) => {
       email: userEmail,
     });
 
-    const review = {
-      mealId: String(mealId),
-
-      // ✅ SUPPORT BOTH
-      username:
-        userData?.userName ||
-        username ||
-        reviewerName ||
-        userEmail.split("@")[0],
-
-      reviewerName:
-        userData?.userName ||
-        username ||
-        reviewerName ||
-        userEmail.split("@")[0],
-
-      reviewerImage,
-      rating: Number(rating),
-      comment,
-      userEmail,
-      createdAt: new Date().toISOString(),
-    };
+  const review = {
+  mealId: String(mealId),
+  mealName,
+  username: userData?.displayName || username || userEmail.split("@")[0],
+  reviewerName: userData?.displayName || username || userEmail.split("@")[0],
+  reviewerImage,
+  rating: Number(rating),
+  comment,
+  userEmail,
+  createdAt: new Date().toISOString(),
+};
 
     const result = await reviewsCollection.insertOne(review);
 
-    // update avg rating
     const allReviews = await reviewsCollection
       .find({ mealId: String(mealId) })
       .toArray();
@@ -252,7 +238,6 @@ app.post("/reviews", async (req, res) => {
     res.status(500).json({ message: "Failed to add review" });
   }
 });
-
 app.delete("/reviews/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -311,10 +296,10 @@ app.patch("/reviews/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to update review" });
   }
 });
-/* ================= FAVORITES ================= */
+/* FAVORITES  */
 app.get("/favorites", async (req, res) => {
   try {
-    // prevent browser caching
+
     res.set("Cache-Control", "no-store");
 
     const email = req.query.email;
@@ -333,9 +318,8 @@ app.get("/favorites", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch favorites" });
   }
 });
-/* ================= FAVORITES ================= */
+/* FAVORITES  */
 
-// POST /favorites - add a meal to favorites
 app.post("/favorites", async (req, res) => {
   try {
     const { userEmail, mealId, mealName, chefId, chefName, price } = req.body;
@@ -344,7 +328,6 @@ app.post("/favorites", async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Check if already in favorites
     const exists = await favoritesCollection.findOne({ userEmail, mealId });
     if (exists) {
       return res.status(400).json({ message: "Meal already in favorites" });
@@ -403,7 +386,7 @@ app.delete("/favorites/:id", async (req, res) => {
   }
 });
 
-/* ================= ORDERS ================= */
+/* ORDERS */
 
 app.post("/orders", async (req, res) => {
   const result = await ordersCollection.insertOne({
@@ -449,7 +432,7 @@ app.patch("/orders/:id/payment", async (req, res) => {
   res.json({ success: true });
 });
 
-/* ================= PAYMENTS ================= */
+/* PAYMENTS  */
 
 app.post("/payments", async (req, res) => {
   const result = await paymentsCollection.insertOne({
@@ -460,10 +443,10 @@ app.post("/payments", async (req, res) => {
   res.json({ ...req.body, _id: result.insertedId.toString() });
 });
 
-// CREATE PAYMENT INTENT
+// CREATE PAYMENT
 app.post("/create-payment-intent", async (req, res) => {
   try {
-    const { amount, currency = "BDT" } = req.body; // amount in smallest unit (e.g., cents)
+    const { amount, currency = "BDT" } = req.body; 
     if (!amount) return res.status(400).json({ message: "Amount is required" });
 
     const paymentIntent = await stripe.paymentIntents.create({
@@ -480,7 +463,7 @@ app.post("/create-payment-intent", async (req, res) => {
   }
 });
 
-/* ================= REQUESTS ================= */
+/* REQUESTS  */
 
 app.post("/requests", async (req, res) => {
   const exists = await requestsCollection.findOne({
@@ -523,7 +506,6 @@ app.patch("/requests/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-/* ================= SERVER ================= */
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
