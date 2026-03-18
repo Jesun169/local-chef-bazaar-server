@@ -203,7 +203,7 @@ app.post("/reviews", async (req, res) => {
 
   const review = {
   mealId: String(mealId),
-  mealName,
+  mealName: mealData?.mealName || "Unknown Meal",
   username: userData?.displayName || username || userEmail.split("@")[0],
   reviewerName: userData?.displayName || username || userEmail.split("@")[0],
   reviewerImage,
@@ -212,6 +212,9 @@ app.post("/reviews", async (req, res) => {
   userEmail,
   createdAt: new Date().toISOString(),
 };
+    const mealData = await mealsCollection.findOne({
+  _id: new ObjectId(mealId),
+});
 
     const result = await reviewsCollection.insertOne(review);
 
