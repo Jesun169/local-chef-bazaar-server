@@ -494,39 +494,19 @@ app.get("/requests", async (req, res) => {
   res.json(reqs.map((r) => ({ ...r, _id: r._id.toString() })));
 });
 
-
 app.patch("/requests/:id", async (req, res) => {
-  try {
-    const { status, role, userEmail } = req.body;
-    const id = req.params.id;
+  const { status, role, userEmail } = req.body;
 
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid Request ID" });
-    }
+  await requestsCollection.updateOne(
+    { _id: new ObjectId(req.params.id) },
+    { $set: { requestStatus: status } }
+  );
 
-    const result = await requestsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { requestStatus: status } }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: "Request not found" });
-    }
-
-    if (status === "approved" && role && userEmail) {
-      const finalRole = role.toLowerCase().includes("chef") ? "chef" : role.toLowerCase();
-      
-      await usersCollection.updateOne(
-        { email: userEmail }, 
-        { $set: { role: finalRole } }
-      );
-    }
-
-    res.json({ success: true, message: `Request ${status}` });
-  } catch (error) {
-    console.error("Patch Request Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+  if (status === "approved" && role) {
+    await usersCollection.updateOne({ email: userEmail }, { $set: { role } });
   }
+
+  res.json({ success: true });
 });
 
 
