@@ -475,21 +475,19 @@ app.patch("/requests/:id", async (req, res) => {
     const { status, role, userEmail } = req.body;
     const id = req.params.id;
 
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid Request ID" });
-    }
+    // Determine if we should use ObjectId or a plain string
+    const query = ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { _id: id };
 
     const result = await requestsCollection.updateOne(
-      { _id: new ObjectId(id) },
+      query, // Use the flexible query here
       { $set: { requestStatus: status } }
     );
 
     if (result.matchedCount === 0) {
-      return res.status(404).json({ message: "Request not found" });
+      return res.status(404).json({ message: "Request not found in database" });
     }
 
     if (status === "approved" && role && userEmail) {
-    
       const finalRole = role.toLowerCase().includes("chef") ? "chef" : role.toLowerCase();
       
       await usersCollection.updateOne(
