@@ -47,7 +47,7 @@ async function connectDB() {
     paymentsCollection = db.collection("payments");
     requestsCollection = db.collection("requests");
 
-    console.log("✅ MongoDB connected");
+    console.log("MongoDB connected");
   }
 }
 
@@ -62,7 +62,7 @@ app.use(async (req, res, next) => {
 
 /* ROOT */
 app.get("/", (req, res) => {
-  res.json({ message: "Local Chef Bazaar Server Running ✅" });
+  res.json({ message: "Local Chef Bazaar Server Running " });
 });
 
 /* USERS  */
@@ -412,34 +412,34 @@ app.patch("/orders/:id/payment", async (req, res) => {
 
 /* PAYMENTS  */
 
-app.post("/payments", async (req, res) => {
-  const result = await paymentsCollection.insertOne({
-    ...req.body,
-    paidAt: new Date().toISOString(),
-  });
+// app.post("/payments", async (req, res) => {
+//   const result = await paymentsCollection.insertOne({
+//     ...req.body,
+//     paidAt: new Date().toISOString(),
+//   });
 
-  res.json({ ...req.body, _id: result.insertedId.toString() });
-});
+//   res.json({ ...req.body, _id: result.insertedId.toString() });
+// });
 
-// CREATE PAYMENT
-app.post("/create-payment-intent", async (req, res) => {
-  try {
-    const { amount, currency = "BDT" } = req.body; 
-    if (!amount) return res.status(400).json({ message: "Amount is required" });
+// // CREATE PAYMENT
+// app.post("/create-payment-intent", async (req, res) => {
+//   try {
+//     const { amount, currency = "BDT" } = req.body; 
+//     if (!amount) return res.status(400).json({ message: "Amount is required" });
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,
-      currency,
-    });
+//     const paymentIntent = await stripe.paymentIntents.create({
+//       amount,
+//       currency,
+//     });
 
-    res.json({
-      clientSecret: paymentIntent.client_secret,
-    });
-  } catch (error) {
-    console.error("Stripe Payment Intent Error:", error);
-    res.status(500).json({ message: "Failed to create payment intent" });
-  }
-});
+//     res.json({
+//       clientSecret: paymentIntent.client_secret,
+//     });
+//   } catch (error) {
+//     console.error("Stripe Payment Intent Error:", error);
+//     res.status(500).json({ message: "Failed to create payment intent" });
+//   }
+// });
 
 /* REQUESTS  */
 
