@@ -475,30 +475,72 @@ app.patch("/requests/:id", async (req, res) => {
     const { status, role, userEmail } = req.body;
     const id = req.params.id;
 
-    // Determine if we should use ObjectId or a plain string
     const query = ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { _id: id };
 
-    const result = await requestsCollection.updateOne(
-      query, // Use the flexible query here
+    // 1. Update the request status
+    const requestResult = await requestsCollection.updateOne(
+      query,
       { $set: { requestStatus: status } }
     );
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: "Request not found in database" });
+    if (requestResult.matchedCount === 0) {
+      return res.status(404).json({ message: "Request not found" });
     }
 
-    if (status === "approved" && role && userEmail) {
-      const finalRole = role.toLowerCase().includes("chef") ? "chef" : role.toLowerCase();
-      
-      await usersCollection.updateOne(
-        { email: userEmail }, 
-        { $set: { role: finalRole } }
-      );
+    // 2. If approved, update user role
+    if (status === "approved" && userEmail) {
+      let updateDoc = {};
+
+      if (role.toLowerCase() === "chef") {
+        // Generate chef-XXXX ID
+        const chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
+        updateDoc = { $set: { role: "chef", chefId: chefId } };
+      } else if (role.toLowerCase() === "admin") {
+        updateDoc = { $set: { role: "admin" } };
+      }
+
+      await usersCollection.updateOne({ email: userEmail }, updateDoc);
     }
 
-    res.json({ success: true, message: `Request ${status}` });
+    res.json({ success: true, message: `Request ${status} successfully` });
   } catch (error) {
-    console.error("Patch Request Error:", error);
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+
+/* ADMIN STATISTICS */
+app.get("/admin/stats", async (req, res) => {
+  try {
+  
+    const totalUsers = await usersCollection.countDocuments();
+    const pendingOrders = await ordersCollection.countDocuments({ 
+      orderStatus: "pending" 
+    });
+    const deliveredOrders = await ordersCollection.countDocuments({ 
+      orderStatus: "delivered" 
+    });
+
+    const paymentStats = await paymentsCollection.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$price" } 
+        }
+      }
+    ]).toArray();
+
+    const totalPaymentAmount = paymentStats.length > 0 ? paymentStats[0].totalRevenue : 0;
+
+    res.json({
+      totalUsers,
+      pendingOrders,
+      deliveredOrders,
+      totalPaymentAmount
+    });
+  } catch (error) {
+    console.error("Stats Error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
