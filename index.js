@@ -182,65 +182,40 @@ app.get("/reviews", async (req, res) => {
 // POST review
 app.post("/reviews", async (req, res) => {
   try {
-    const {
-      mealId,
-      mealName,
-      username,
-      reviewerName,
-      reviewerImage,
-      rating,
-      comment,
-      userEmail,
-    } = req.body;
+    const { mealId, rating, comment, userEmail, username, reviewerImage } = req.body;
 
     if (!mealId || !rating || !comment || !userEmail) {
       return res.status(400).json({ message: "Missing fields" });
     }
 
-    const userData = await usersCollection.findOne({
-      email: userEmail,
-    });
+    // 1. FETCH DATA FIRST
+    const mealData = await mealsCollection.findOne({ _id: new ObjectId(mealId) });
+    const userData = await usersCollection.findOne({ email: userEmail });
 
-  const review = {
-  mealId: String(mealId),
-  mealName: mealData?.mealName || "Unknown Meal",
-  username: userData?.displayName || username || userEmail.split("@")[0],
-  reviewerName: userData?.displayName || username || userEmail.split("@")[0],
-  reviewerImage,
-  rating: Number(rating),
-  comment,
-  userEmail,
-  createdAt: new Date().toISOString(),
-};
-    const mealData = await mealsCollection.findOne({
-  _id: new ObjectId(mealId),
-});
+    // 2. NOW DEFINE THE REVIEW OBJECT
+    const review = {
+      mealId: String(mealId),
+      mealName: mealData?.mealName || "Unknown Meal",
+      username: userData?.displayName || username || userEmail.split("@")[0],
+      reviewerName: userData?.displayName || username || userEmail.split("@")[0],
+      reviewerImage,
+      rating: Number(rating),
+      comment,
+      userEmail,
+      createdAt: new Date().toISOString(),
+    };
 
     const result = await reviewsCollection.insertOne(review);
 
-    const allReviews = await reviewsCollection
-      .find({ mealId: String(mealId) })
-      .toArray();
+    // ... (rest of your average rating logic)
+    res.json({ success: true, insertedId: result.insertedId.toString(), review });
 
-    const avg =
-      allReviews.reduce((sum, r) => sum + r.rating, 0) /
-      allReviews.length;
-
-    await mealsCollection.updateOne(
-      { _id: new ObjectId(mealId) },
-      { $set: { rating: parseFloat(avg.toFixed(1)) } }
-    );
-
-    res.json({
-      success: true,
-      insertedId: result.insertedId.toString(),
-      review,
-    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to add review" });
   }
 });
+
 app.delete("/reviews/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -494,19 +469,40 @@ app.get("/requests", async (req, res) => {
   res.json(reqs.map((r) => ({ ...r, _id: r._id.toString() })));
 });
 
+
 app.patch("/requests/:id", async (req, res) => {
-  const { status, role, userEmail } = req.body;
+  try {
+    const { status, role, userEmail } = req.body;
+    const id = req.params.id;
 
-  await requestsCollection.updateOne(
-    { _id: new ObjectId(req.params.id) },
-    { $set: { requestStatus: status } }
-  );
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid Request ID" });
+    }
 
-  if (status === "approved" && role) {
-    await usersCollection.updateOne({ email: userEmail }, { $set: { role } });
+    const result = await requestsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { requestStatus: status } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+
+    if (status === "approved" && role && userEmail) {
+    
+      const finalRole = role.toLowerCase().includes("chef") ? "chef" : role.toLowerCase();
+      
+      await usersCollection.updateOne(
+        { email: userEmail }, 
+        { $set: { role: finalRole } }
+      );
+    }
+
+    res.json({ success: true, message: `Request ${status}` });
+  } catch (error) {
+    console.error("Patch Request Error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
-
-  res.json({ success: true });
 });
 
 
