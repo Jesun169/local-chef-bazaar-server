@@ -469,15 +469,18 @@ app.get("/requests", async (req, res) => {
   res.json(reqs.map((r) => ({ ...r, _id: r._id.toString() })));
 });
 
-
 app.patch("/requests/:id", async (req, res) => {
   try {
     const { status, role, userEmail } = req.body;
     const id = req.params.id;
 
-    const query = ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { _id: id };
+    console.log("Updating request:", id, status, role, userEmail);
 
-    // 1. Update the request status
+    const query = ObjectId.isValid(id)
+      ? { _id: new ObjectId(id) }
+      : { _id: id };
+
+    // 1. Update request status
     const requestResult = await requestsCollection.updateOne(
       query,
       { $set: { requestStatus: status } }
@@ -487,28 +490,35 @@ app.patch("/requests/:id", async (req, res) => {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    // 2. If approved, update user role
+    // 2. Update user role
     if (status === "approved" && userEmail) {
-      let updateDoc = {};
+      const targetRole = role.toLowerCase();
 
-      if (role.toLowerCase() === "chef") {
-        // Generate chef-XXXX ID
-        const chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
-        updateDoc = { $set: { role: "chef", chefId: chefId } };
-      } else if (role.toLowerCase() === "admin") {
-        updateDoc = { $set: { role: "admin" } };
+      let updateDoc = { $set: { role: targetRole } };
+
+      if (targetRole === "chef") {
+        updateDoc.$set.chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
       }
 
-      await usersCollection.updateOne({ email: userEmail }, updateDoc);
+      const userUpdateResult = await usersCollection.updateOne(
+        { email: userEmail },
+        updateDoc
+      );
+
+      if (userUpdateResult.matchedCount === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      console.log("User role updated:", userUpdateResult);
     }
 
     res.json({ success: true, message: `Request ${status} successfully` });
+
   } catch (error) {
-    console.error(error);
+    console.error("Update Error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
-
 
 /* ADMIN STATISTICS */
 app.get("/admin/stats", async (req, res) => {
