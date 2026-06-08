@@ -523,31 +523,59 @@ app.patch("/requests/:id", async (req, res) => {
 /* ADMIN STATISTICS */
 app.get("/admin/stats", async (req, res) => {
   try {
-  
     const totalUsers = await usersCollection.countDocuments();
-    const pendingOrders = await ordersCollection.countDocuments({ 
-      orderStatus: "pending" 
-    });
-    const deliveredOrders = await ordersCollection.countDocuments({ 
-      orderStatus: "delivered" 
+    const totalMeals = await mealsCollection.countDocuments();
+    const totalChefs = await usersCollection.countDocuments({ role: "chef" });
+
+    const pendingOrders = await ordersCollection.countDocuments({
+      orderStatus: "pending",
     });
 
-    const paymentStats = await paymentsCollection.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$price" } 
-        }
-      }
-    ]).toArray();
+    const deliveredOrders = await ordersCollection.countDocuments({
+      orderStatus: "delivered",
+    });
 
-    const totalPaymentAmount = paymentStats.length > 0 ? paymentStats[0].totalRevenue : 0;
+    const totalOrders = await ordersCollection.countDocuments();
+
+    const paymentStats = await paymentsCollection
+      .aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: "$price" },
+          },
+        },
+      ])
+      .toArray();
+
+    const totalRevenue =
+      paymentStats.length > 0 ? paymentStats[0].totalRevenue : 0;
+
+    // average rating from reviews
+    const ratingStats = await reviewsCollection
+      .aggregate([
+        {
+          $group: {
+            _id: null,
+            avgRating: { $avg: "$rating" },
+            totalReviews: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+
+    const avgRating =
+      ratingStats.length > 0 ? ratingStats[0].avgRating : 0;
 
     res.json({
       totalUsers,
+      totalMeals,
+      totalChefs,
+      totalOrders,
       pendingOrders,
       deliveredOrders,
-      totalPaymentAmount
+      totalRevenue,
+      avgRating: Number(avgRating.toFixed(1)),
     });
   } catch (error) {
     console.error("Stats Error:", error);
