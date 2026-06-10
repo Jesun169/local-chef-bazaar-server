@@ -107,9 +107,19 @@ app.get("/meals", async (req, res) => {
     query.chefEmail = req.query.chefEmail;
   }
 
-  const meals = await mealsCollection.find(query).toArray();
+  const limit = parseInt(req.query.limit) || 0;
 
-  res.json(meals.map((m) => ({ ...m, _id: m._id.toString() })));
+  const meals = await mealsCollection
+    .find(query)
+    .limit(limit)
+    .toArray();
+
+  res.json(
+    meals.map((m) => ({
+      ...m,
+      _id: m._id.toString(),
+    }))
+  );
 });
 
 app.get("/meals/:id", async (req, res) => {
@@ -129,9 +139,17 @@ app.get("/meals/:id", async (req, res) => {
 });
 
 app.post("/meals", async (req, res) => {
-  const result = await mealsCollection.insertOne(req.body);
+  const meal = {
+    ...req.body,
+    createdAt: new Date().toISOString(),
+  };
 
-  res.json({ ...req.body, _id: result.insertedId.toString() });
+  const result = await mealsCollection.insertOne(meal);
+
+  res.json({
+    ...meal,
+    _id: result.insertedId.toString(),
+  });
 });
 
 app.patch("/meals/:id", async (req, res) => {
